@@ -6,15 +6,43 @@ import json
 class ClaudeHelper:
     def __init__(self):
         try:
+            print("Initializing ClaudeHelper...")
             # Read API key from file
             with open('api_key.txt', 'r') as f:
                 self.api_key = f.read().strip()
-            if not self.api_key or self.api_key == "your_api_key_here":
-                raise ValueError("Please set your Claude API key in api_key.txt")
+            print(f"API key read: {self.api_key[:10]}...")
+            
+            # Validate API key
+            if not self.api_key:
+                raise ValueError("API key is empty")
+            if self.api_key == "your_api_key_here":
+                raise ValueError("Please replace 'your_api_key_here' with your actual Claude API key")
+            if not self.api_key.startswith("sk-ant-api"):
+                raise ValueError("Invalid API key format")
+                
+            # Initialize client
+            print("Initializing Anthropic client...")
             self.client = anthropic.Anthropic(api_key=self.api_key)
+            print("Anthropic client initialized successfully")
+            
+            # Test connection
+            print("Testing API connection...")
+            try:
+                response = self.client.messages.create(
+                    model="claude-3-opus-20240229",
+                    max_tokens=1,
+                    messages=[{"role": "user", "content": "test"}]
+                )
+                print("API connection test successful")
+            except Exception as e:
+                print(f"API connection test failed: {str(e)}")
+                raise Exception(f"Failed to connect to Claude API: {str(e)}")
+                
         except FileNotFoundError:
+            print("api_key.txt not found")
             raise FileNotFoundError("api_key.txt not found. Please create it with your API key.")
         except Exception as e:
+            print(f"Error in ClaudeHelper initialization: {str(e)}")
             raise Exception(f"Error initializing Claude API: {str(e)}")
     
     def get_suggestions(self, game_state: dict) -> Tuple[str, str]:
@@ -29,6 +57,7 @@ class ClaudeHelper:
             raise ValueError("game_state must be a dictionary")
             
         try:
+            print("Preparing prompt for Claude API...")
             prompt = f"""
             You are an expert game player playing the Game of Nim. Given the following game state:
             {json.dumps(game_state, indent=2)}
@@ -50,11 +79,13 @@ class ClaudeHelper:
             - The number_of_objects must be between 1 and the number of objects in that row
             """
             
+            print("Sending request to Claude API...")
             response = self.client.messages.create(
                 model="claude-3-opus-20240229",
                 max_tokens=1000,
                 messages=[{"role": "user", "content": prompt}]
             )
+            print("Received response from Claude API")
             
             # Parse the response to extract move and explanation
             move = None
@@ -67,11 +98,14 @@ class ClaudeHelper:
                     explanation = line.split(': ')[1].strip()
             
             if move and explanation:
+                print(f"Successfully parsed response: Move={move}, Explanation={explanation}")
                 return (move, explanation)
             else:
+                print("Failed to parse Claude's response")
                 raise Exception("Could not parse Claude's response")
                 
         except Exception as e:
+            print(f"Error in get_suggestions: {str(e)}")
             raise Exception(f"Error getting suggestions from Claude API: {str(e)}")
     
     def compare_moves(self, game_state: dict, move1: str, move2: str) -> str:

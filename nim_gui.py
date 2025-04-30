@@ -1,214 +1,206 @@
-import pygame
-import textwrap
-import ast
-from games import alpha_beta_search
+import tkinter as tk
+from tkinter import ttk, messagebox
 from game_of_nim import GameOfNim
+from games import GameState
 
-pygame.init()
+class NimGUI:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Game of Nim")
+        # Get screen dimensions
+        screen_width = root.winfo_screenwidth()
+        screen_height = root.winfo_screenheight()
+        # Set window size to half screen width and full screen height
+        self.root.geometry(f"{screen_width//2}x{screen_height}")
 
-# Game Window
-WIDTH, HEIGHT = 1280, 720
-FONT = pygame.font.SysFont('arial', 24)
-SMALL_FONT = pygame.font.SysFont(None, 20)
+        # Game mode selection
+        self.mode_var = tk.StringVar(value="PvP")
+        self.first_var = tk.StringVar(value="Player")
+        mode_frame = ttk.LabelFrame(root, text="Game Mode", padding="10")
+        mode_frame.grid(row=0, column=0, pady=5, padx=10, sticky=tk.W)
+        ttk.Radiobutton(mode_frame, text="Player vs Player", variable=self.mode_var, value="PvP").grid(row=0, column=0, sticky=tk.W)
+        ttk.Radiobutton(mode_frame, text="Player vs AI", variable=self.mode_var, value="PvE").grid(row=0, column=1, sticky=tk.W)
+        self.first_label = ttk.Label(mode_frame, text="Who goes first:")
+        self.first_combo = ttk.Combobox(mode_frame, textvariable=self.first_var, state="readonly", values=["Player", "AI"])
+        self.first_label.grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.first_combo.grid(row=1, column=1, sticky=tk.W, pady=2)
+        self.first_label.grid_remove()
+        self.first_combo.grid_remove()
+        self.mode_var.trace_add('write', self.toggle_first_option)
 
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Game of Nim")
+        # Start and Restart buttons
+        self.start_button = ttk.Button(mode_frame, text="Start", command=self.start_game)
+        self.start_button.grid(row=2, column=0, pady=5)
+        self.restart_button = ttk.Button(mode_frame, text="Restart", command=self.restart_game, state=tk.DISABLED)
+        self.restart_button.grid(row=2, column=1, pady=5)
 
-# Colors
-WHITE = (30,65,31)
-BLACK = (0, 0, 0)
-GRAY = (200, 200, 200)
-RED = (236, 40, 50)
+        # Main frame
+        self.main_frame = ttk.Frame(root, padding="10")
+        self.main_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
-# Used for drawing stacks
-current_state = None
+        # Game status
+        self.status_label = ttk.Label(self.main_frame, text="Game Status: Player 0's turn")
+        self.status_label.grid(row=0, column=0, columnspan=2, pady=10)
 
-# Creates the nim sticks
-def draw_sticks(board):
-    screen.fill(WHITE)
-    stick_width = WIDTH // len(board)
-    for i, count in enumerate(board):
-        x = i * stick_width + stick_width // 2
+        # Piles display
+        self.piles_frame = ttk.LabelFrame(self.main_frame, text="Piles", padding="5")
+        self.piles_frame.grid(row=1, column=0, columnspan=2, pady=10)
+        self.pile_labels = []
+        for i in range(3):
+            label = ttk.Label(self.piles_frame, text=f"Pile {i}: 0 objects")
+            label.grid(row=i, column=0, padx=5, pady=5)
+            self.pile_labels.append(label)
 
-        # Draws Sticks
-        for j in range(count):
-            y = HEIGHT - 50 - j * 25
-            pygame.draw.rect(screen, GRAY, (x-10, y, 20, 20))
-    
-        # Label each row
-        label = f"{i}"
-        label_surf = FONT.render(label, True, BLACK)
-        label_x = x-label_surf.get_width()//2
-        label_y = HEIGHT - 30
-        screen.blit(label_surf, (label_x, label_y))
+        # Move selection
+        self.move_frame = ttk.LabelFrame(self.main_frame, text="Make a Move", padding="5")
+        self.move_frame.grid(row=2, column=0, columnspan=2, pady=10)
+        ttk.Label(self.move_frame, text="Select Pile:").grid(row=0, column=0, padx=5)
+        self.pile_var = tk.StringVar()
+        self.pile_combo = ttk.Combobox(self.move_frame, textvariable=self.pile_var, state="readonly")
+        self.pile_combo['values'] = [i for i in range(3)]
+        self.pile_combo.grid(row=0, column=1, padx=5)
+        ttk.Label(self.move_frame, text="Objects to remove:").grid(row=1, column=0, padx=5)
+        self.objects_var = tk.StringVar()
+        self.objects_entry = ttk.Entry(self.move_frame, textvariable=self.objects_var)
+        self.objects_entry.grid(row=1, column=1, padx=5)
+        self.move_button = ttk.Button(self.move_frame, text="Make Move", command=self.make_move, state=tk.DISABLED)
+        self.move_button.grid(row=2, column=0, columnspan=2, pady=10)
 
-    pygame.display.flip()
+        # Suggestions
+        self.suggestions_frame = ttk.LabelFrame(self.main_frame, text="Game Suggestions", padding="5")
+        self.suggestions_frame.grid(row=3, column=0, columnspan=2, pady=10)
+        self.suggestions_text = tk.Text(self.suggestions_frame, height=12, width=70, font=("Consolas", 14))
+        self.suggestions_text.grid(row=0, column=0, padx=5, pady=5)
+        self.suggestions_text.config(state=tk.DISABLED)
+        self.suggestions_button = ttk.Button(self.suggestions_frame, text="Get Suggestions", command=self.get_suggestions, state=tk.DISABLED)
+        self.suggestions_button.grid(row=1, column=0, pady=5)
 
-def draw_buttons(suggestions):
-    global current_state
-    buttons = []
-    screen.fill(WHITE)
+        # Game state
+        self.game = None
+        self.current_state = None
+        self.claude_available = False
+        self.is_ai_turn = False
 
-    # Draw sticks below the buttons
-    draw_sticks(current_state.board)
-
-    title = FONT.render("Choose a move:", True, RED)
-    screen.blit(title, (WIDTH//2 - title.get_width() // 2, 50))
-
-    # Button formatting
-    button_width = 220
-    button_height = 60
-    spacing = 40
-    total_width = 3 * button_width + 2 * spacing
-    start_x = (WIDTH - total_width) // 2
-    y = 150
-
-    # Button, text box, and label creation
-    for i, (move, explanation) in enumerate(suggestions):
-        # Uncomment this if statement and indent everything until line 120 to disregard Custom button.
-        # if i < len(suggestions)-1: 
-
-        rect = pygame.Rect(start_x + i * (button_width + spacing), y, button_width, button_height)
-        pygame.draw.rect(screen, GRAY, rect)
-        pygame.draw.rect(screen, BLACK, rect, 2)
-
-        # Button Label
-        if isinstance(move, tuple):
-            label = explanation
+    def toggle_first_option(self, *args):
+        if self.mode_var.get() == "PvE":
+            self.first_label.grid()
+            self.first_combo.grid()
         else:
-            label = "Custom"
-        
-        label_surface = FONT.render(label, True, BLACK)
-        label_x = rect.x + (button_width - label_surface.get_width())//2
-        label_y = rect.y + 5
-        screen.blit(label_surface, (label_x, label_y))
+            self.first_label.grid_remove()
+            self.first_combo.grid_remove()
 
-        # Move Label
-        if isinstance(move, tuple):
-            move_text = str(move[0])
-        else:
-            move_text = "Choose Move"
-        
-        move_label = SMALL_FONT.render(move_text, True, BLACK)
-        move_x = rect.x + (button_width - move_label.get_width()) // 2
-        move_y = label_y + 30
-        screen.blit(move_label, (move_x, move_y))
+    def start_game(self):
+        self.setup_game()
+        self.move_button.config(state=tk.NORMAL)
+        self.suggestions_button.config(state=tk.NORMAL)
+        self.restart_button.config(state=tk.NORMAL)
+        self.start_button.config(state=tk.DISABLED)
+        # Kiểm tra Claude API khả dụng
+        try:
+            from claude_helper import ClaudeHelper
+            test_claude = ClaudeHelper()
+            # Thử gọi API để kiểm tra kết nối thực sự
+            test_claude.get_suggestions({"board": [3, 4, 5], "to_move": "P1"})
+            self.claude_available = True
+        except Exception as e:
+            print(f"Claude API not available: {str(e)}")
+            self.claude_available = False
+            messagebox.showwarning("Warning", "Claude API is not available. Suggestions will be limited to evaluation function only.")
 
-        # Explanation Box Formatting
-        if isinstance(move, tuple):
-            text_box_y = move_y + 30
-            if explanation == "Claude's Suggestion:":
-                text_box_height = 350
+    def restart_game(self):
+        self.setup_game()
+        self.move_button.config(state=tk.NORMAL)
+        self.suggestions_button.config(state=tk.NORMAL)
+
+    def setup_game(self):
+        self.game = GameOfNim(board=[3, 4, 5], use_claude=self.claude_available)
+        if self.mode_var.get() == "PvE":
+            if self.first_var.get() == "AI":
+                self.current_state = GameState(to_move='COMP', utility=0, board=[3, 4, 5], moves=[(x, y) for x in range(3) for y in range(1, [3, 4, 5][x]+1)])
             else:
-                text_box_height = 50
-
-            text_box_rect = pygame.Rect(rect.x, text_box_y, button_width, text_box_height)
-            pygame.draw.rect(screen, (240, 240, 240), text_box_rect)
-            pygame.draw.rect(screen, BLACK, text_box_rect, 1)
-        
-            max_chars = 28
-            wrap_lines = textwrap.wrap(move[1], width=max_chars)
-
-            line_y = text_box_y + 5
-            for line in wrap_lines:
-                if line_y + 18 > text_box_y + text_box_height:
-                    break
-                line_surface = SMALL_FONT.render(line, True, BLACK)
-                screen.blit(line_surface, (rect.x + 5, line_y))
-                line_y += 18
-
-        buttons.append((rect, move, explanation))
-
-    pygame.display.flip()
-    return [(rect, move) for rect, move, _ in buttons]
-
-def button_click(pos, board):
-    x, y = pos
-    for i in range(len(board)):
-        stack_x = 100 + i*200
-        if stack_x - 30 < x < stack_x + 30:
-            return i
-    return None
-
-def show_winner(winner):
-    screen.fill(WHITE)
-
-    message = f"{winner} won!!"
-    text_surf = pygame.font.SysFont(None, 60).render(message, True, (0, 128, 0))
-    text_rect = text_surf.get_rect(center=(WIDTH//2, HEIGHT//2))
-    screen.blit(text_surf, text_rect)
-    pygame.display.flip()
-
-    pygame.time.wait(5000)
-
-def main():
-    game = GameOfNim(board=[3, 4, 5])
-    state = game.initial
-    custom_move = False
-    selected_stack = None
-
-    draw_sticks(state.board)
-
-    running = True
-    while running:
-        draw_sticks(state.board)
-        if game.terminal_test(state):
-            winner="You" if state.to_move =="P1" else "AI"
-            show_winner(winner)
-            running = False
-            continue
-
-        if state.to_move == 'P1':
-            if not custom_move:
-                claude_suggestion = game.get_claude_suggestion(state)
-                eval_suggestion = game.get_eval_suggestion(state)
-                suggestions = GameOfNim.display_suggestions(state, claude_suggestion, eval_suggestion)
-                print(suggestions)
-                global current_state
-                current_state = state
-                buttons = draw_buttons(suggestions)
-
-                waiting = True
-                while waiting:
-                    for event in pygame.event.get():
-                        if event.type == pygame.QUIT:
-                            pygame.quit()
-                        elif event.type == pygame.MOUSEBUTTONDOWN:
-                            for rect, move in buttons:
-                                if rect.collidepoint(event.pos):
-                                    if move == "Custom":
-                                        custom_move = True
-                                        waiting = False
-                                    else:
-                                        nums = ast.literal_eval(move[0])
-                                        state = game.result(state, nums)
-                                        waiting = False
-            else:
-                # Custom Move
-                if event.type == pygame.QUIT:
-                    pygame.quit()
-                elif event.type == pygame.MOUSEBUTTONDOWN:
-                    stack = button_click(event.pos, state.board)
-                    if stack is not None:
-                        selected_stack = stack
-                        print(f"Selected stack {stack}. Press number key to remove objects.")
-                elif event.type == pygame.KEYDOWN and selected_stack is not None:
-                    if pygame.K_1 <= event.key <= pygame.K_9:
-                        amount = event.key - pygame.K_0
-                        move = (selected_stack, amount)
-                        if move in state.moves:
-                            state = game.result(state, nums)
-                            custom_move = False
-                            break
-                        else:
-                            print("Invalid move")
+                self.current_state = GameState(to_move='P1', utility=0, board=[3, 4, 5], moves=[(x, y) for x in range(3) for y in range(1, [3, 4, 5][x]+1)])
         else:
-            # pygame.time.wait(100)
-            move = alpha_beta_search(state, game)
-            print(f"AI chooses {move}")
-            state = game.result(state, move)
+            self.current_state = self.game.initial
+        self.update_ui()
+        self.root.after(100, self.after_update)
 
-    pygame.quit()
+    def update_ui(self):
+        for i in range(3):
+            self.pile_labels[i].config(text=f"Pile {i}: {self.current_state.board[i]} objects")
+        if self.game.terminal_test(self.current_state):
+            winner = "Player 0" if self.current_state.to_move == 'COMP' else "Player 1"
+            self.status_label.config(text=f"Game Over! {winner} wins!")
+            self.move_button.config(state=tk.DISABLED)
+        else:
+            if self.mode_var.get() == "PvE":
+                if self.current_state.to_move == 'COMP':
+                    self.status_label.config(text="Game Status: AI's turn")
+                else:
+                    self.status_label.config(text="Game Status: Player's turn")
+            else:
+                current_player = "Player 0" if self.current_state.to_move == 'COMP' else "Player 1"
+                self.status_label.config(text=f"Game Status: {current_player}'s turn")
+            self.move_button.config(state=tk.NORMAL)
+
+    def after_update(self):
+        if self.game and self.mode_var.get() == "PvE" and not self.game.terminal_test(self.current_state):
+            if self.current_state.to_move == 'COMP':
+                self.root.after(700, self.ai_move)
+
+    def make_move(self):
+        try:
+            pile = int(self.pile_var.get())
+            objects = int(self.objects_var.get())
+            if not (0 <= pile < len(self.current_state.board)):
+                messagebox.showerror("Error", "Invalid pile selection")
+                return
+            if not (1 <= objects <= self.current_state.board[pile]):
+                messagebox.showerror("Error", "Invalid number of objects")
+                return
+            move = (pile, objects)
+            if move not in self.current_state.moves:
+                messagebox.showerror("Error", "Invalid move")
+                return
+            self.current_state = self.game.result(self.current_state, move)
+            self.update_ui()
+            self.objects_var.set("")
+            self.after_update()
+        except ValueError:
+            messagebox.showerror("Error", "Please enter valid numbers")
+
+    def ai_move(self):
+        move, _ = self.game.get_eval_suggestion(self.current_state)
+        move = eval(move)
+        self.current_state = self.game.result(self.current_state, move)
+        self.update_ui()
+        self.after_update()
+
+    def get_suggestions(self):
+        try:
+            suggestions_text = ""
+            if self.claude_available:
+                try:
+                    claude_suggestion = self.game.get_claude_suggestion(self.current_state)
+                    suggestions_text += "Claude's Suggestion:\n"
+                    suggestions_text += f"Move: {claude_suggestion[0]}\n"
+                    suggestions_text += f"Explanation: {claude_suggestion[1]}\n\n"
+                except Exception as e:
+                    suggestions_text += "Claude's Suggestion:\n"
+                    suggestions_text += f"Error: {str(e)}\n\n"
+            
+            eval_suggestion = self.game.get_eval_suggestion(self.current_state)
+            suggestions_text += "Evaluation Function Suggestion:\n"
+            suggestions_text += f"Move: {eval_suggestion[0]}\n"
+            suggestions_text += f"Explanation: {eval_suggestion[1]}"
+            
+            self.suggestions_text.config(state=tk.NORMAL)
+            self.suggestions_text.delete(1.0, tk.END)
+            self.suggestions_text.insert(tk.END, suggestions_text)
+            self.suggestions_text.config(state=tk.DISABLED)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to get suggestions: {str(e)}")
 
 if __name__ == "__main__":
-    main()
+    root = tk.Tk()
+    app = NimGUI(root)
+    root.mainloop() 

@@ -7,21 +7,37 @@ class GameOfNim(Game):
     the form of a list of (x, y) positions, and a board, in the form of
     a list with number of objects in each row."""
 
-    def __init__(self, board=[3,1]):
+    def __init__(self, board=[3,1], use_claude=True):
         self.board = board
         moves = [(x, y) for x in range(len(board)) 
                  for y in range(1,board[x]+1)]
         self.initial = GameState(to_move='COMP', utility=0, board=board, moves=moves)
-        self.claude = ClaudeHelper()
+        self.claude = None
+        if use_claude:
+            try:
+                self.claude = ClaudeHelper()
+                # Test Claude API connection
+                test_state = {"board": board, "to_move": "COMP", "moves": moves}
+                self.claude.get_suggestions(test_state)
+            except Exception as e:
+                print(f"Claude API initialization failed: {str(e)}")
+                self.claude = None
 
     def get_claude_suggestion(self, state):
         """Get a single move suggestion from Claude API"""
-        game_state = {
-            "board": state.board,
-            "current_player": state.to_move,
-            "moves": state.moves
-        }
-        return self.claude.get_suggestions(game_state)
+        if self.claude is None:
+            return ("(0, 1)", "Claude API is not available")
+            
+        try:
+            game_state = {
+                "board": state.board,
+                "to_move": state.to_move,
+                "moves": state.moves
+            }
+            return self.claude.get_suggestions(game_state)
+        except Exception as e:
+            print(f"Error getting Claude suggestion: {str(e)}")
+            return ("(0, 1)", f"Claude API error: {str(e)}")
 
     def get_eval_suggestion(self, state):
         """Get a move suggestion from evaluation function using alpha-beta pruning"""
@@ -41,12 +57,6 @@ class GameOfNim(Game):
         print(f"Explanation: {eval_suggestion[1]}")
         
         print("\nOption 3 (Enter your own move)")
-
-        return [
-            (claude_suggestion, "Claude's Suggestion:"),
-            (eval_suggestion, "Evaluation Functioin:"),
-            ("Custom", "Choose your own move")
-        ]
 
     def get_user_choice(self, claude_suggestion, eval_suggestion, state):
         """Get user's choice between suggestions or their own move"""
