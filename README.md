@@ -70,6 +70,7 @@ To modify or extend the project:
 1. Game Logic: Edit `game_of_nim.py`
 2. AI Algorithms: Edit `games.py`
 3. Claude Integration: Edit `claude_helper.py`
+4. GUI Window: Edit `nim_gui.py`
 
 ## Testing
 
