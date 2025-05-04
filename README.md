@@ -52,6 +52,7 @@ Example: `(1, 2)` means take 2 objects from row 1
 ## Project Structure
 
 - `game_of_nim.py`: Main game implementation
+- `nim_gui.py`: GUI Implementation
 - `games.py`: Core game framework and AI algorithms
 - `claude_helper.py`: Claude API integration
 - `utils.py`: Utility functions
@@ -62,6 +63,7 @@ Example: `(1, 2)` means take 2 objects from row 1
 - anthropic>=0.18.1
 - numpy>=1.21.0
 - pytest>=7.0.0
+- pygame>=2.6.1
 
 ## Development
 
