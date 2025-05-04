@@ -42,6 +42,12 @@ class GameOfNim(Game):
         
         print("\nOption 3 (Enter your own move)")
 
+        return [
+            (claude_suggestion, "Claude's Suggestion:"),
+            (eval_suggestion, "Evaluation Functioin:"),
+            ("Custom", "Choose your own move")
+        ]
+
     def get_user_choice(self, claude_suggestion, eval_suggestion, state):
         """Get user's choice between suggestions or their own move"""
         while True:
