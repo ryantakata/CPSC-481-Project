@@ -72,8 +72,13 @@ class NimGUI:
         self.suggestions_text = tk.Text(self.suggestions_frame, height=12, width=70, font=("Consolas", 14))
         self.suggestions_text.grid(row=0, column=0, padx=5, pady=5)
         self.suggestions_text.config(state=tk.DISABLED)
+        
+        # Add compare moves button
+        self.compare_button = ttk.Button(self.suggestions_frame, text="Compare Moves", command=self.compare_moves, state=tk.DISABLED)
+        self.compare_button.grid(row=1, column=0, pady=5)
+        
         self.suggestions_button = ttk.Button(self.suggestions_frame, text="Get Suggestions", command=self.get_suggestions, state=tk.DISABLED)
-        self.suggestions_button.grid(row=1, column=0, pady=5)
+        self.suggestions_button.grid(row=2, column=0, pady=5)
 
         # Game state
         self.game = None
@@ -93,6 +98,7 @@ class NimGUI:
         self.setup_game()
         self.move_button.config(state=tk.NORMAL)
         self.suggestions_button.config(state=tk.NORMAL)
+        self.compare_button.config(state=tk.NORMAL)
         self.restart_button.config(state=tk.NORMAL)
         self.start_button.config(state=tk.DISABLED)
         # Kiểm tra Claude API khả dụng
@@ -199,6 +205,36 @@ class NimGUI:
             self.suggestions_text.config(state=tk.DISABLED)
         except Exception as e:
             messagebox.showerror("Error", f"Failed to get suggestions: {str(e)}")
+
+    def compare_moves(self):
+        try:
+            if not self.claude_available:
+                messagebox.showwarning("Warning", "Claude API is not available. Cannot compare moves.")
+                return
+                
+            # Get both suggestions
+            claude_suggestion = self.game.get_claude_suggestion(self.current_state)
+            eval_suggestion = self.game.get_eval_suggestion(self.current_state)
+            
+            # Get game state for comparison
+            game_state = {
+                "board": self.current_state.board,
+                "to_move": self.current_state.to_move,
+                "moves": self.current_state.moves
+            }
+            
+            # Get comparison from Claude
+            comparison = self.game.claude.compare_moves(game_state, claude_suggestion[0], eval_suggestion[0])
+            
+            # Display comparison
+            self.suggestions_text.config(state=tk.NORMAL)
+            self.suggestions_text.delete(1.0, tk.END)
+            self.suggestions_text.insert(tk.END, "Move Comparison:\n\n")
+            self.suggestions_text.insert(tk.END, comparison)
+            self.suggestions_text.config(state=tk.DISABLED)
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to compare moves: {str(e)}")
 
 if __name__ == "__main__":
     root = tk.Tk()
