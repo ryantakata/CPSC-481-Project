@@ -42,7 +42,11 @@ class GameOfNim(Game):
     def get_eval_suggestion(self, state):
         """Get a move suggestion from evaluation function using alpha-beta pruning"""
         move = alpha_beta_search(state, self)
-        return (str(move), "This move is suggested by the evaluation function using alpha-beta pruning.")
+        heuristic = get_heuristic(state, move)
+        board = state.board.copy()
+        board[move[0]] -= move[1]
+
+        return (str(move), f"Taking {move[1]} objects from row {move[0]} will reslt in a nim sum of {heuristic} and a board state of {board}.")
 
     def display_suggestions(self, claude_suggestion, eval_suggestion):
         """Display both Claude's and evaluation function's suggestions"""
@@ -155,6 +159,15 @@ def query_player_with_claude(game, state):
     # Let user choose a move
     move = game.get_user_choice(claude_suggestion, eval_suggestion, state)
     return move
+
+def get_heuristic(state, move):
+    board = state.board.copy()
+    board[move[0]] -= move[1]
+    print(board)
+    result = 0
+    for stack in board:
+        result ^= int(stack)
+    return result
 
 if __name__ == "__main__":
     # Create game instance with initial board [0, 5, 3, 1]

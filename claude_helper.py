@@ -68,6 +68,7 @@ class ClaudeHelper:
             For the move:
             1. First, provide the move in the exact format: (row, number_of_objects)
             2. Then explain why this move would be good
+            3. Display the nim sum of the board state.
             
             Format your response exactly as:
             Move: (row, number_of_objects)
