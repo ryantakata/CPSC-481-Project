@@ -95,38 +95,47 @@ class NimGUI:
             self.first_combo.grid_remove()
 
     def start_game(self):
-        self.setup_game()
-        self.move_button.config(state=tk.NORMAL)
-        self.suggestions_button.config(state=tk.NORMAL)
-        self.compare_button.config(state=tk.NORMAL)
-        self.restart_button.config(state=tk.NORMAL)
-        self.start_button.config(state=tk.DISABLED)
-        # Kiểm tra Claude API khả dụng
+        # check Claude API
         try:
             from claude_helper import ClaudeHelper
             test_claude = ClaudeHelper()
-            # Thử gọi API để kiểm tra kết nối thực sự
             test_claude.get_suggestions({"board": [3, 4, 5], "to_move": "P1"})
             self.claude_available = True
         except Exception as e:
             print(f"Claude API not available: {str(e)}")
             self.claude_available = False
             messagebox.showwarning("Warning", "Claude API is not available. Suggestions will be limited to evaluation function only.")
+        self.setup_game()
+        self.move_button.config(state=tk.NORMAL)
+        self.suggestions_button.config(state=tk.NORMAL)
+        self.compare_button.config(state=tk.NORMAL)
+        self.restart_button.config(state=tk.NORMAL)
+        self.start_button.config(state=tk.DISABLED)
+        # Clear suggestions box 
+        self.suggestions_text.config(state=tk.NORMAL)
+        self.suggestions_text.delete(1.0, tk.END)
+        self.suggestions_text.config(state=tk.DISABLED)
 
     def restart_game(self):
         self.setup_game()
         self.move_button.config(state=tk.NORMAL)
         self.suggestions_button.config(state=tk.NORMAL)
+        # Clear suggestions box when restart game
+        self.suggestions_text.config(state=tk.NORMAL)
+        self.suggestions_text.delete(1.0, tk.END)
+        self.suggestions_text.config(state=tk.DISABLED)
+        self.start_button.config(state=tk.NORMAL)
 
     def setup_game(self):
         self.game = GameOfNim(board=[3, 4, 5], use_claude=self.claude_available)
+        moves = [(x, y) for x in range(3) for y in range(1, [3, 4, 5][x]+1)]
         if self.mode_var.get() == "PvE":
             if self.first_var.get() == "AI":
-                self.current_state = GameState(to_move='COMP', utility=0, board=[3, 4, 5], moves=[(x, y) for x in range(3) for y in range(1, [3, 4, 5][x]+1)])
+                self.current_state = GameState(to_move='COMP', utility=0, board=[3, 4, 5], moves=moves)
             else:
-                self.current_state = GameState(to_move='P1', utility=0, board=[3, 4, 5], moves=[(x, y) for x in range(3) for y in range(1, [3, 4, 5][x]+1)])
+                self.current_state = GameState(to_move='P1', utility=0, board=[3, 4, 5], moves=moves)
         else:
-            self.current_state = self.game.initial
+            self.current_state = GameState(to_move='P1', utility=0, board=[3, 4, 5], moves=moves)
         self.update_ui()
         self.root.after(100, self.after_update)
 
@@ -183,6 +192,8 @@ class NimGUI:
 
     def get_suggestions(self):
         try:
+            print(f"DEBUG: claude_available = {self.claude_available}, mode = {self.mode_var.get()}")
+            print(f"DEBUG: current_state board = {self.current_state.board}, to_move = {self.current_state.to_move}, moves = {self.current_state.moves}")
             suggestions_text = ""
             if self.claude_available:
                 try:
@@ -193,12 +204,10 @@ class NimGUI:
                 except Exception as e:
                     suggestions_text += "Claude's Suggestion:\n"
                     suggestions_text += f"Error: {str(e)}\n\n"
-            
             eval_suggestion = self.game.get_eval_suggestion(self.current_state)
             suggestions_text += "Evaluation Function Suggestion:\n"
             suggestions_text += f"Move: {eval_suggestion[0]}\n"
             suggestions_text += f"Explanation: {eval_suggestion[1]}"
-            
             self.suggestions_text.config(state=tk.NORMAL)
             self.suggestions_text.delete(1.0, tk.END)
             self.suggestions_text.insert(tk.END, suggestions_text)
